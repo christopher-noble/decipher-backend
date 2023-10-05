@@ -1,18 +1,23 @@
 import { StartTranscriptionJobCommand, GetTranscriptionJobCommand, TranscribeClient } from "@aws-sdk/client-transcribe";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
+import { clearDirectory } from './utils';
+import express from 'express';
+import axios from 'axios';
+import cors from 'cors';
+import fs from 'fs';
+import multer from 'multer';
+import path from 'path';
 require('dotenv').config();
-const multer = require('multer');
 
 console.log("Starting up...")
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-const storage = multer.memoryStorage(); // This will store the file in memory; you can also save it to disk or other locations
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+const downloadsFolder = './downloads';
+clearDirectory(downloadsFolder)
 
 const awsCreds = {
     region: 'us-west-2',
@@ -27,6 +32,43 @@ const transcribeClient = new TranscribeClient(awsCreds);
 const s3Client = new S3Client(awsCreds);
 let transcriptTimestampMap: any[] = [];
 let fullTranscript: any[] = [];
+
+const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
+    clearDirectory(downloadsFolder)
+
+    const options = {
+        method: 'GET',
+        url: 'https://youtube-mp36.p.rapidapi.com/dl',
+        params: { id: inputUrlRef },
+        headers: {
+            'X-RapidAPI-Key': 'e7d95e6d25mshc0f099fc7eef2cfp1dfc20jsn04a7d40df4fa',
+            'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
+        }
+    };
+    const response = await axios(options);
+    console.log("axios response to convert to mp3: ", response.data);
+    const mp3Url = response.data.link;
+    if (response.data.link) {
+        console.log('response.data.link: ', mp3Url);
+
+        if (!fs.existsSync(downloadsFolder)) {
+            fs.mkdirSync(downloadsFolder, { recursive: true });
+        }
+
+        const fileName = path.basename(new URL(mp3Url).pathname);
+        const savePath = path.join(downloadsFolder, fileName);
+
+        const response = await axios.get(mp3Url, { responseType: 'stream' });
+
+        const writer = fs.createWriteStream(savePath);
+        response.data.pipe(writer);
+
+        return new Promise((resolve, reject) => {
+            writer.on('finish', () => resolve(fs.readFileSync(`./downloads/${fileName}`)));
+            writer.on('error', reject);
+        });
+    }
+}
 
 const getTranscriptionDetails = async (params: any): Promise<void> => {
     return new Promise(async (resolve, reject) => {
@@ -51,8 +93,6 @@ const getTranscriptionDetails = async (params: any): Promise<void> => {
                     jsonOutput.results.items.forEach((item: any) => {
                         keywordTimestamp.push({ 'keyword': item.alternatives[0].content, 'timestamp': item.start_time })
                     })
-                    console.log("keywordTimestamp: ", keywordTimestamp);
-                    console.log("fullTranscript: ", fullTranscript);
 
                     transcriptTimestampMap = keywordTimestamp;
                     resolve();
@@ -63,23 +103,29 @@ const getTranscriptionDetails = async (params: any): Promise<void> => {
 
             } else if (status === "FAILED") {
                 console.log('Transcription Failed: ' + data.TranscriptionJob?.FailureReason);
+                reject(data.TranscriptionJob?.FailureReason);
             } else {
                 console.log("In Progress...");
                 setTimeout(() => {
                     getTranscriptionDetails(params).then(resolve).catch(reject);
                 }, 1000);
-                ;
             }
         } catch (err) {
             console.log("Error", err);
         }
     })
-
 };
 
 app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
-    if (!req.file) {
-        return res.status(400).send({ message: 'No file uploaded' });
+    if (!req.file && !req.body.inputUrlRef) {
+        return res.status(400).send({ message: 'No valid data sent to server' });
+    }
+
+    let mp3Buffer = req.file?.buffer;
+    let s3key = req.file?.originalname || `${req.body.inputUrlRef}.mp3`;
+
+    if (req.body.inputUrlRef.length > 1) {
+        mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
     }
 
     const params = {
@@ -87,16 +133,15 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
         LanguageCode: "en-US",
         MediaFormat: "mp3",
         Media: {
-            MediaFileUri: `s3://decipher-audio-files/${req.file.originalname}`,
+            MediaFileUri: `s3://decipher-audio-files/${s3key}`,
         },
         OutputBucketName: s3BucketName
     };
 
-    // pushing content to S3
     const command = new PutObjectCommand({
         Bucket: s3BucketName,
-        Key: req.file.originalname,
-        Body: req.file.buffer,
+        Key: s3key,
+        Body: mp3Buffer,
     });
 
     try {
@@ -108,45 +153,17 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     setTimeout(async () => {
         console.log("Receiving content from S3, uploading to Transcribe")
         try {
+            console.log("params: ", params);
             await transcribeClient.send(
                 new StartTranscriptionJobCommand(params)
             );
             await getTranscriptionDetails(params);
-            const fullDataResponse = {fullTranscript, transcriptTimestampMap};
+            const fullDataResponse = { fullTranscript, transcriptTimestampMap };
             res.send(fullDataResponse);
         } catch (err) {
-            console.log("Error (made by chris):", err);
+            console.log("Error at final stage:", err);
         }
     }, 2500);
-});
-
-app.post('/saveMP3', async (req: any, res: any) => {
-    const options = {
-        method: 'GET',
-        url: 'https://youtube-mp36.p.rapidapi.com/dl',
-        params: { id: req.body.inputUrlRef },
-        headers: {
-            'X-RapidAPI-Key': 'e7d95e6d25mshc0f099fc7eef2cfp1dfc20jsn04a7d40df4fa',
-            'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
-        }
-    };
-    const response = await axios(options);
-    console.log("axios response to convert to mp3: ", response.data);
-    const url = response.data.link;
-
-    // axios.get(url, { responseType: 'arraybuffer' })
-    //     .then(response => {
-    //         const base64MP3 = Buffer.from(response.data, 'binary').toString('base64');
-    //         const dataUrl = `data:audio/mpeg;base64,${base64MP3}`;
-    //         console.log('response.data: ', response.data);
-    //         res.send({
-    //             dataUrl,
-    //             title: 'hello'
-    //         });
-    //     })
-    //     .catch(err => {
-    //         res.status(500).send(`Error fetching MP3: ${err.message}`);
-    //     });
 });
 
 app.listen(3001, () => {
