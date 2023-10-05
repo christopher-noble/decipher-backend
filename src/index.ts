@@ -19,6 +19,11 @@ const upload = multer({ storage: storage });
 const downloadsFolder = './downloads';
 clearDirectory(downloadsFolder)
 
+const rapidApiCreds = {
+    'X-RapidAPI-Key': process.env.X_RAPID_API_KEY,
+    'X-RapidAPI-Host': process.env.X_RAPID_API_HOST
+};
+
 const awsCreds = {
     region: 'us-west-2',
     credentials: {
@@ -40,17 +45,15 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
         method: 'GET',
         url: 'https://youtube-mp36.p.rapidapi.com/dl',
         params: { id: inputUrlRef },
-        headers: {
-            'X-RapidAPI-Key': process.env.X_RAPID_API_KEY!,
-            'X-RapidAPI-Host': process.env.X_RAPID_API_HOST!
-        }
+        headers: rapidApiCreds
+        // headers: {
+        //     'X-RapidAPI-Key': 'e7d95e6d25mshc0f099fc7eef2cfp1dfc20jsn04a7d40df4fa',
+        //     'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
+        // }
     };
     const response = await axios(options);
-    console.log("axios response to convert to mp3: ", response.data);
     const mp3Url = response.data.link;
     if (response.data.link) {
-        console.log('response.data.link: ', mp3Url);
-
         if (!fs.existsSync(downloadsFolder)) {
             fs.mkdirSync(downloadsFolder, { recursive: true });
         }
@@ -58,15 +61,20 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
         const fileName = path.basename(new URL(mp3Url).pathname);
         const savePath = path.join(downloadsFolder, fileName);
 
-        const response = await axios.get(mp3Url, { responseType: 'stream' });
+        try {
+            const response = await axios.get(mp3Url, { responseType: 'stream' });
 
-        const writer = fs.createWriteStream(savePath);
-        response.data.pipe(writer);
+            const writer = fs.createWriteStream(savePath);
+            response.data.pipe(writer);
 
-        return new Promise((resolve, reject) => {
-            writer.on('finish', () => resolve(fs.readFileSync(`./downloads/${fileName}`)));
-            writer.on('error', reject);
-        });
+            return new Promise((resolve, reject) => {
+                writer.on('finish', () => resolve(fs.readFileSync(`./downloads/${fileName}`)));
+                writer.on('error', reject);
+            });
+        } catch (err) {
+            console.log("err: ", err);
+        }
+
     }
 }
 
@@ -82,7 +90,6 @@ const getTranscriptionDetails = async (params: any): Promise<void> => {
             const status = data.TranscriptionJob?.TranscriptionJobStatus;
             if (status === "COMPLETED") {
                 console.log("Completed!");
-
                 const response = await s3Client.send(command);
                 const result = await response.Body?.transformToString();
                 if (result) {
@@ -125,7 +132,12 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     let s3key = req.file?.originalname || `${req.body.inputUrlRef}.mp3`;
 
     if (req.body.inputUrlRef.length > 1) {
-        mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
+        try {
+            mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
+        }
+        catch(err) {
+            console.log("err: ", err);
+        }
     }
 
     const params = {
@@ -153,7 +165,6 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     setTimeout(async () => {
         console.log("Receiving content from S3, uploading to Transcribe")
         try {
-            console.log("params: ", params);
             await transcribeClient.send(
                 new StartTranscriptionJobCommand(params)
             );
