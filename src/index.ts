@@ -46,10 +46,6 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
         url: 'https://youtube-mp36.p.rapidapi.com/dl',
         params: { id: inputUrlRef },
         headers: rapidApiCreds
-        // headers: {
-        //     'X-RapidAPI-Key': 'e7d95e6d25mshc0f099fc7eef2cfp1dfc20jsn04a7d40df4fa',
-        //     'X-RapidAPI-Host': 'youtube-mp36.p.rapidapi.com'
-        // }
     };
     const response = await axios(options);
     const mp3Url = response.data.link;
@@ -74,7 +70,6 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
         } catch (err) {
             console.log("err: ", err);
         }
-
     }
 }
 
