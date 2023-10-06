@@ -7,6 +7,7 @@ import cors from 'cors';
 import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
+const serverless = require('serverless-http');
 require('dotenv').config();
 
 console.log("Starting up...")
@@ -175,3 +176,5 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
 app.listen(3001, () => {
     console.log('Server is running on port 3001...');
 });
+
+module.exports.handler = serverless(app);
