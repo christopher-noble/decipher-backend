@@ -1,17 +1,17 @@
 # Decipher - Backend
 
-Welcome to the Decipher backend repository! This is the server-side component of the Decipher app, designed to enhance your audio content consumption experience. Decipher is a powerful transcription service that takes either YouTube links or user-uploaded audio files as input, processes the audio, and returns full audio transcripts along with timestamps for specified keywords or phrases.
+Welcome to the Decipher backend repository. This is the server-side component of the Decipher app, designed to enhance your audio content consumption experience. Decipher is a powerful transcription service that takes either YouTube links or user-uploaded audio files as input, processes the audio, and returns full audio transcripts along with timestamps for specified keywords or phrases.
 
 ## Stack
 
+- **TypeScript**
 - **Node.js**
 - **Express.js**
-- **TypeScript**
 - **AWS Transcribe**
 
 ## Features
 
-- **Audio Conversion**: Seamlessly convert YouTube videos and uploaded audio files to MP3.
+- **Audio Conversion**: Seamlessly upload YouTube content, we handle the conversions.
 - **Transcription with AWS Transcribe**: Integrate with AWS Transcribe for automatic transcription.
 - **Keyword-Driven Transcription**: Generate dynamic timestamps for specified keywords or phrases.
 - **Scalability**: Handle high volumes of audio conversion and transcription requests.
