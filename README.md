@@ -11,11 +11,11 @@ Welcome to the Decipher backend repository! This is the server-side component of
 
 ## Features
 
-- **Audio Transcription**: Convert audio content to written text.
-- **Keyword-Based Transcription and Timestamps**: Accept user input keywords or phrases, process the audio, and return full audio transcripts along with timestamps for each input from the audio.
-- **Integration with AWS Transcribe**: Submit audio files to AWS Transcribe for automatic transcription.
-- **Scalable Architecture**: Built to handle high volumes of transcription and timestamp generation requests.
-- **RESTful API**: Easily interact with the backend via a clean and well-documented API.
+- **Audio Conversion**: Seamlessly convert YouTube videos and uploaded audio files to MP3.
+- **Transcription with AWS Transcribe**: Integrate with AWS Transcribe for automatic transcription.
+- **Keyword-Driven Transcription**: Generate dynamic timestamps for specified keywords or phrases.
+- **Scalability**: Handle high volumes of audio conversion and transcription requests.
+- **RESTful API**: Easily integrate with other systems through a well-documented API.
 
 ## Support
 
