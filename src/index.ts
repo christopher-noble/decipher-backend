@@ -127,7 +127,7 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     let mp3Buffer = req.file?.buffer;
     let s3key = req.file?.originalname || `${req.body.inputUrlRef}.mp3`;
 
-    if (req.body.inputUrlRef.length > 1) {
+    if (req.body.inputUrlRef?.length > 1) {
         try {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
