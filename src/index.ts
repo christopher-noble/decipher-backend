@@ -16,9 +16,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({
+    storage: storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024  // 5MB limit
+    }
+});
 const downloadsFolder = './downloads';
 clearDirectory(downloadsFolder)
+const AUDIO_TOO_LARGE = 'Audio must be under 5 minutes (beta)';
 
 const rapidApiCreds = {
     'X-RapidAPI-Key': process.env.X_RAPID_API_KEY,
@@ -121,7 +127,10 @@ const getTranscriptionDetails = async (params: any): Promise<void> => {
 
 app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     if (!req.file && !req.body.inputUrlRef) {
-        return res.status(400).send({ message: 'No valid data sent to server' });
+        return res.status(400).send({ message: 'No data provided' });
+    }
+    if (req.file && req.file.size > 5 * 1024 * 1024) {
+        return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
     let mp3Buffer = req.file?.buffer;
@@ -131,9 +140,13 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
         try {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
-        catch(err) {
+        catch (err) {
             console.log("err: ", err);
         }
+    }
+
+    if (mp3Buffer && mp3Buffer.length > 5 * 1024 * 1024) {
+        return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
     const params = {
