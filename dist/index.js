@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_transcribe_1 = require("@aws-sdk/client-transcribe");
 const client_s3_1 = require("@aws-sdk/client-s3");
-const utils_1 = require("./utils");
+const utils_1 = require("./utils/utils");
 const express_1 = __importDefault(require("express"));
 const axios_1 = __importDefault(require("axios"));
 const cors_1 = __importDefault(require("cors"));
@@ -22,7 +22,7 @@ const storage = multer_1.default.memoryStorage();
 const upload = (0, multer_1.default)({
     storage: storage,
     limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB limit
+        fileSize: 5 * 1024 * 1024 // 5MB (5 mins) limit
     }
 });
 const downloadsFolder = './downloads';
@@ -110,7 +110,7 @@ const getTranscriptionDetails = async (params) => {
                 console.log("In Progress...");
                 setTimeout(() => {
                     getTranscriptionDetails(params).then(resolve).catch(reject);
-                }, 1000);
+                }, 2000);
             }
         }
         catch (err) {

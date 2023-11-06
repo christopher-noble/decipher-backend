@@ -1,6 +1,7 @@
 import { StartTranscriptionJobCommand, GetTranscriptionJobCommand, TranscribeClient } from "@aws-sdk/client-transcribe";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { clearDirectory } from './utils';
+import { KeywordTimestamp, TranscriptionParams, TranscriptionResult } from './utils/interfaces';
+import { clearDirectory } from './utils/utils';
 import express from 'express';
 import axios from 'axios';
 import cors from 'cors';
@@ -19,7 +20,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
     storage: storage,
     limits: {
-        fileSize: 5 * 1024 * 1024  // 5MB limit
+        fileSize: 5 * 1024 * 1024  // 5MB (5 mins) limit
     }
 });
 const downloadsFolder = './downloads';
@@ -42,8 +43,8 @@ const awsCreds = {
 const s3BucketName = 'decipher-audio-files';
 const transcribeClient = new TranscribeClient(awsCreds);
 const s3Client = new S3Client(awsCreds);
-let transcriptTimestampMap: any[] = [];
-let fullTranscript: any[] = [];
+let transcriptTimestampMap: KeywordTimestamp[] = [];
+let fullTranscript: string[] = [];
 
 const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
     clearDirectory(downloadsFolder)
@@ -80,7 +81,7 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
     }
 }
 
-const getTranscriptionDetails = async (params: any): Promise<void> => {
+const getTranscriptionDetails = async (params: TranscriptionParams): Promise<void> => {
     return new Promise(async (resolve, reject) => {
         const command = new GetObjectCommand({
             Bucket: s3BucketName,
@@ -98,8 +99,8 @@ const getTranscriptionDetails = async (params: any): Promise<void> => {
                     const jsonOutput = await JSON.parse(result);
 
                     fullTranscript = jsonOutput.results.transcripts[0].transcript;
-                    let keywordTimestamp: any = [];
-                    jsonOutput.results.items.forEach((item: any) => {
+                    let keywordTimestamp: KeywordTimestamp[] = [];
+                    jsonOutput.results.items.forEach((item: TranscriptionResult) => {
                         keywordTimestamp.push({ 'keyword': item.alternatives[0].content, 'timestamp': item.start_time })
                     })
 
@@ -117,7 +118,7 @@ const getTranscriptionDetails = async (params: any): Promise<void> => {
                 console.log("In Progress...");
                 setTimeout(() => {
                     getTranscriptionDetails(params).then(resolve).catch(reject);
-                }, 1000);
+                }, 2000);
             }
         } catch (err) {
             console.log("Error", err);
