@@ -17,14 +17,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 const storage = multer.memoryStorage();
+
+const FIVE_MINUTES = 5 * 1024 * 1024;
+
 const upload = multer({
     storage: storage,
     limits: {
-        fileSize: 5 * 1024 * 1024  // 5MB (5 mins) limit
+        fileSize: FIVE_MINUTES  // 5MB (5 mins) limit
     }
 });
 const downloadsFolder = './downloads';
-clearDirectory(downloadsFolder)
+clearDirectory(downloadsFolder) // make sure the downloads folder is empty
 const AUDIO_TOO_LARGE = 'Audio must be under 5 minutes (beta)';
 
 const rapidApiCreds = {
@@ -41,13 +44,23 @@ const awsCreds = {
 }
 
 const s3BucketName = 'decipher-audio-files';
-const transcribeClient = new TranscribeClient(awsCreds);
+const transcribeClient = new TranscribeClient(awsCreds); //initialize AWS SDK with our creds
 const s3Client = new S3Client(awsCreds);
 let transcriptTimestampMap: KeywordTimestamp[] = [];
 let fullTranscript: string[] = [];
 
+/**
+ * 
+ * @param inputUrlRef 
+ * @returns mp3 file in buffer format
+ * 
+ * This function sends a GET request to https://youtube-mp36.p.rapidapi.com/dl with the inputUrlRef as a parameter.
+ * inputUrlRef is "EeEf6ydtI" from this example link: https://www.youtube.com/watch?v=J_EeEf6ydtI.
+ * The GET request from https://youtube-mp36.p.rapidapi.com/dl returns a response containing a downloadable link for the new audio file. 
+ * The new audio file is temporarily stored in /downloads before being converted and returned in buffer format.
+ */
 const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
-    clearDirectory(downloadsFolder)
+    clearDirectory(downloadsFolder) // make sure the downloads folder is empty.
 
     const options = {
         method: 'GET',
@@ -55,8 +68,10 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
         params: { id: inputUrlRef },
         headers: rapidApiCreds
     };
-    const response = await axios(options);
+
+    const response = await axios(options); //GET request
     const mp3Url = response.data.link;
+
     if (response.data.link) {
         if (!fs.existsSync(downloadsFolder)) {
             fs.mkdirSync(downloadsFolder, { recursive: true });
@@ -66,13 +81,14 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
         const savePath = path.join(downloadsFolder, fileName);
 
         try {
-            const response = await axios.get(mp3Url, { responseType: 'stream' });
+            const response = await axios.get(mp3Url, { responseType: 'stream' });//download the MP3 file in chunks
 
-            const writer = fs.createWriteStream(savePath);
+            const writer = fs.createWriteStream(savePath);//save the downloaded MP3 file in downloads folder
             response.data.pipe(writer);
 
+            //finally the MP3 file is read from the downloads directory, and function returns the file content in buffer format
             return new Promise((resolve, reject) => {
-                writer.on('finish', () => resolve(fs.readFileSync(`./downloads/${fileName}`)));
+                writer.on('finish', () => resolve(fs.readFileSync(`./downloads/${fileName}`))); //convert the MP3 file into a buffer
                 writer.on('error', reject);
             });
         } catch (err) {
@@ -99,7 +115,7 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
                     const jsonOutput = await JSON.parse(result);
 
                     fullTranscript = jsonOutput.results.transcripts[0].transcript;
-                    let keywordTimestamp: KeywordTimestamp[] = [];
+                    let keywordTimestamp: KeywordTimestamp[] = []; //keywordTimestamp is a array of objects that I made to link together words and timestamps of each word as key value pairs.
                     jsonOutput.results.items.forEach((item: TranscriptionResult) => {
                         keywordTimestamp.push({ 'keyword': item.alternatives[0].content, 'timestamp': item.start_time })
                     })
@@ -126,11 +142,15 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
     })
 };
 
+/**
+ * API endpoint.
+ * Prameter req is the request parameter send by the fronend. res is the reponse returned to the frontend.
+ */
 app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     if (!req.file && !req.body.inputUrlRef) {
         return res.status(400).send({ message: 'No data provided' });
     }
-    if (req.file && req.file.size > 5 * 1024 * 1024) {
+    if (req.file && req.file.size > FIVE_MINUTES) {
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
@@ -146,7 +166,7 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
         }
     }
 
-    if (mp3Buffer && mp3Buffer.length > 5 * 1024 * 1024) {
+    if (mp3Buffer && mp3Buffer.length > FIVE_MINUTES) {
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
