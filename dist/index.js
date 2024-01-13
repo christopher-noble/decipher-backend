@@ -176,7 +176,7 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
         console.log("error: file is too large");
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
-    logger.info('req.body.jobName: ', req.body.jobName);
+    // logger.info('req.body.jobName: ', req.body.jobName);
     const params = {
         TranscriptionJobName: req.body.jobName,
         LanguageCode: "en-US",
