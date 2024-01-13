@@ -70,10 +70,12 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
         headers: rapidApiCreds
     };
 
-    logger.info('options: ', options);
+    logger.info('inputUrlRef: ', inputUrlRef);
 
     const response = await axios(options); //GET request
     const mp3Url = response.data.link;
+
+    logger.info('response.data.link: ', response.data.link);
 
     if (response.data.link) {
         if (!fs.existsSync(downloadsFolder)) {
@@ -175,6 +177,7 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
+    logger.info('req.body.jobName: ', req.body.jobName);
     const params = {
         TranscriptionJobName: req.body.jobName,
         LanguageCode: "en-US",
