@@ -75,8 +75,6 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
     const response = await axios(options); //GET request
     const mp3Url = response.data.link;
 
-    logger.info('response.data.link: ', response.data.link);
-
     if (response.data.link) {
         if (!fs.existsSync(downloadsFolder)) {
             fs.mkdirSync(downloadsFolder, { recursive: true });
