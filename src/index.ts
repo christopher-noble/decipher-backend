@@ -10,8 +10,10 @@ import multer from 'multer';
 import path from 'path';
 const serverless = require('serverless-http');
 require('dotenv').config();
+const logger = require('./utils/logging');
 
 console.log("Starting up...")
+logger.info('Starting up...');
 
 const app = express();
 app.use(cors());
@@ -109,6 +111,7 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
             const status = data.TranscriptionJob?.TranscriptionJobStatus;
             if (status === "COMPLETED") {
                 console.log("Completed!");
+                logger.info('Completed!');
                 const response = await s3Client.send(command);
                 const result = await response.Body?.transformToString();
                 if (result) {
@@ -125,10 +128,12 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
                 }
                 else {
                     console.log("There is no result returned from S3");
+                    logger.info('There is no result returned from S3');
                 }
 
             } else if (status === "FAILED") {
                 console.log('Transcription Failed: ' + data.TranscriptionJob?.FailureReason);
+                logger.info('Transcription Failed: ' + data.TranscriptionJob?.FailureReason);
                 reject(data.TranscriptionJob?.FailureReason);
             } else {
                 console.log("In Progress...");
@@ -137,6 +142,7 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
                 }, 2000);
             }
         } catch (err) {
+            logger.error("Error", err);
             console.log("Error", err);
         }
     })
@@ -151,6 +157,7 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
         return res.status(400).send({ message: 'No data provided' });
     }
     if (req.file && req.file.size > FIVE_MINUTES) {
+        logger.error('File is too large');
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
@@ -162,11 +169,13 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            console.log("err: ", err);
+            logger.error("Error", err);
+            console.log("Error: ", err);
         }
     }
 
     if (mp3Buffer && mp3Buffer.length > FIVE_MINUTES) {
+        logger.error('File is too large');
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
@@ -189,10 +198,12 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     try {
         await s3Client.send(command);
     } catch (err) {
+        logger.error("Error when uploading to S3: ", err);
         console.error("error when uploading to S3: ", err);
     }
 
     setTimeout(async () => {
+        logger.info("Receiving content from S3, uploading to Transcribe")
         console.log("Receiving content from S3, uploading to Transcribe")
         try {
             await transcribeClient.send(
@@ -202,12 +213,14 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             const fullDataResponse = { fullTranscript, transcriptTimestampMap };
             res.send(fullDataResponse);
         } catch (err) {
+            logger.error("Error at final stage: ", err);
             console.log("Error at final stage:", err);
         }
     }, 2500);
 });
 
 app.listen(3000, '0.0.0.0', () => {
+    logger.info('Server is running');
     console.log('Server is running on port 3000...');
 });
 
