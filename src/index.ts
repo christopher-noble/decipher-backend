@@ -97,7 +97,7 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
                 writer.on('error', reject);
             });
         } catch (err) {
-            logger.error(err);
+            logger.error('Error on writing/converting mp3');
         }
     }
 }
@@ -142,7 +142,7 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
                 }, 2000);
             }
         } catch (err) {
-            logger.error(err);
+            logger.error('Error on transcription process');
         }
     })
 };
@@ -169,7 +169,7 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            logger.error('Error with inputUrlRef: ', err);
+            logger.error('Error with inputUrlRef: ');
         }
     }
     else {
@@ -201,7 +201,7 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     try {
         await s3Client.send(command);
     } catch (err) {
-        logger.error("Error when uploading to S3: ", err);
+        logger.error("Error when uploading to S3: ");
     }
 
     setTimeout(async () => {
