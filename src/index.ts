@@ -86,10 +86,11 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
         const savePath = path.join(downloadsFolder, fileName);
 
         try {
-            const response = await axios.get(mp3Url, { responseType: 'stream' });//download the MP3 file in chunks
-
+            console.log("mp3Url: ", mp3Url);
             const writer = fs.createWriteStream(savePath);//save the downloaded MP3 file in downloads folder
-            response.data.pipe(writer);
+            await axios.get(mp3Url, { responseType: 'stream' }) //download the MP3 file in chunks
+            .then(response => response.data.pipe(writer))
+            .catch((err) => console.log("error getting mp3 audio:", err));
 
             //finally the MP3 file is read from the downloads directory, and function returns the file content in buffer format
             return new Promise((resolve, reject) => {
@@ -98,7 +99,7 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
             });
         } catch (err) {
             // logger.error('Error on writing/converting mp3');
-            console.log("error on writing/converting mp3");
+            console.log("error on writing/converting mp3: ", err);
         }
     }
 }
