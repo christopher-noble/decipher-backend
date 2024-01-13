@@ -210,7 +210,12 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             );
             await getTranscriptionDetails(params);
             const fullDataResponse = { fullTranscript, transcriptTimestampMap };
-            res.send(fullDataResponse);
+            if (fullTranscript || transcriptTimestampMap) {
+                res.send(fullDataResponse);
+            }
+            else {
+                res.send('Unable to process transcript');
+            }
         } catch (err) {
             logger.error("Error at final stage: ");
         }
