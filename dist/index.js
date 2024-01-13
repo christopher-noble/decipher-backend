@@ -15,7 +15,6 @@ const path_1 = __importDefault(require("path"));
 const serverless = require('serverless-http');
 require('dotenv').config();
 const logger = require('./utils/logging');
-console.log("Starting up...");
 logger.info('Starting up...');
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
@@ -84,13 +83,13 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef) => {
             });
         }
         catch (err) {
-            console.log("err: ", err);
+            logger.error(err);
         }
     }
 };
 const getTranscriptionDetails = async (params) => {
     return new Promise(async (resolve, reject) => {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d;
         const command = new client_s3_1.GetObjectCommand({
             Bucket: s3BucketName,
             Key: `${params.TranscriptionJobName}.json`
@@ -99,7 +98,6 @@ const getTranscriptionDetails = async (params) => {
             const data = await transcribeClient.send(new client_transcribe_1.GetTranscriptionJobCommand(params));
             const status = (_a = data.TranscriptionJob) === null || _a === void 0 ? void 0 : _a.TranscriptionJobStatus;
             if (status === "COMPLETED") {
-                console.log("Completed!");
                 logger.info('Completed!');
                 const response = await s3Client.send(command);
                 const result = await ((_b = response.Body) === null || _b === void 0 ? void 0 : _b.transformToString());
@@ -114,25 +112,22 @@ const getTranscriptionDetails = async (params) => {
                     resolve();
                 }
                 else {
-                    console.log("There is no result returned from S3");
                     logger.info('There is no result returned from S3');
                 }
             }
             else if (status === "FAILED") {
-                console.log('Transcription Failed: ' + ((_c = data.TranscriptionJob) === null || _c === void 0 ? void 0 : _c.FailureReason));
-                logger.info('Transcription Failed: ' + ((_d = data.TranscriptionJob) === null || _d === void 0 ? void 0 : _d.FailureReason));
-                reject((_e = data.TranscriptionJob) === null || _e === void 0 ? void 0 : _e.FailureReason);
+                logger.info('Transcription Failed: ' + ((_c = data.TranscriptionJob) === null || _c === void 0 ? void 0 : _c.FailureReason));
+                reject((_d = data.TranscriptionJob) === null || _d === void 0 ? void 0 : _d.FailureReason);
             }
             else {
-                console.log("In Progress...");
+                logger.info('In Progress...');
                 setTimeout(() => {
                     getTranscriptionDetails(params).then(resolve).catch(reject);
                 }, 2000);
             }
         }
         catch (err) {
-            logger.error("Error", err);
-            console.log("Error", err);
+            logger.error(err);
         }
     });
 };
@@ -156,8 +151,7 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            logger.error("Error", err);
-            console.log("Error: ", err);
+            logger.error(err);
         }
     }
     if (mp3Buffer && mp3Buffer.length > FIVE_MINUTES) {
@@ -187,7 +181,6 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
     }
     setTimeout(async () => {
         logger.info("Receiving content from S3, uploading to Transcribe");
-        console.log("Receiving content from S3, uploading to Transcribe");
         try {
             await transcribeClient.send(new client_transcribe_1.StartTranscriptionJobCommand(params));
             await getTranscriptionDetails(params);
@@ -196,12 +189,10 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
         }
         catch (err) {
             logger.error("Error at final stage: ", err);
-            console.log("Error at final stage:", err);
         }
     }, 2500);
 });
 app.listen(3000, '0.0.0.0', () => {
     logger.info('Server is running');
-    console.log('Server is running on port 3000...');
 });
 module.exports.handler = serverless(app);

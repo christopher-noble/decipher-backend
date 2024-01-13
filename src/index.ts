@@ -12,7 +12,6 @@ const serverless = require('serverless-http');
 require('dotenv').config();
 const logger = require('./utils/logging');
 
-console.log("Starting up...")
 logger.info('Starting up...');
 
 const app = express();
@@ -94,7 +93,7 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
                 writer.on('error', reject);
             });
         } catch (err) {
-            console.log("err: ", err);
+            logger.error(err);
         }
     }
 }
@@ -110,7 +109,6 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
             const data = await transcribeClient.send(new GetTranscriptionJobCommand(params));
             const status = data.TranscriptionJob?.TranscriptionJobStatus;
             if (status === "COMPLETED") {
-                console.log("Completed!");
                 logger.info('Completed!');
                 const response = await s3Client.send(command);
                 const result = await response.Body?.transformToString();
@@ -127,23 +125,20 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
                     resolve();
                 }
                 else {
-                    console.log("There is no result returned from S3");
                     logger.info('There is no result returned from S3');
                 }
 
             } else if (status === "FAILED") {
-                console.log('Transcription Failed: ' + data.TranscriptionJob?.FailureReason);
                 logger.info('Transcription Failed: ' + data.TranscriptionJob?.FailureReason);
                 reject(data.TranscriptionJob?.FailureReason);
             } else {
-                console.log("In Progress...");
+                logger.info('In Progress...');
                 setTimeout(() => {
                     getTranscriptionDetails(params).then(resolve).catch(reject);
                 }, 2000);
             }
         } catch (err) {
-            logger.error("Error", err);
-            console.log("Error", err);
+            logger.error(err);
         }
     })
 };
@@ -169,8 +164,7 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            logger.error("Error", err);
-            console.log("Error: ", err);
+            logger.error(err);
         }
     }
 
@@ -204,7 +198,6 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
 
     setTimeout(async () => {
         logger.info("Receiving content from S3, uploading to Transcribe")
-        console.log("Receiving content from S3, uploading to Transcribe")
         try {
             await transcribeClient.send(
                 new StartTranscriptionJobCommand(params)
@@ -214,14 +207,12 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             res.send(fullDataResponse);
         } catch (err) {
             logger.error("Error at final stage: ", err);
-            console.log("Error at final stage:", err);
         }
     }, 2500);
 });
 
 app.listen(3000, '0.0.0.0', () => {
     logger.info('Server is running');
-    console.log('Server is running on port 3000...');
 });
 
 module.exports.handler = serverless(app);
