@@ -152,7 +152,7 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
  * req is the request parameter send by the frontend. res is the reponse returned to the frontend.
  */
 app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
-    logger.info('req.body: ', req.body);
+    logger.info('req.body.inputUrlRef: ', req.body.inputUrlRef);
     if (!req.file && !req.body.inputUrlRef) {
         return res.status(400).send({ message: 'No data provided' });
     }
@@ -169,8 +169,11 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            logger.error(err);
+            logger.error('Error with inputUrlRef: ', err);
         }
+    }
+    else {
+        logger.error('inputUrlRef is invalid: ', req.body.inputUrlRef);
     }
 
     if (mp3Buffer && mp3Buffer.length > FIVE_MINUTES) {
@@ -199,7 +202,6 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
         await s3Client.send(command);
     } catch (err) {
         logger.error("Error when uploading to S3: ", err);
-        console.error("error when uploading to S3: ", err);
     }
 
     setTimeout(async () => {

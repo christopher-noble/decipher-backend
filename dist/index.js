@@ -139,7 +139,7 @@ const getTranscriptionDetails = async (params) => {
  */
 app.post('/transcribe', upload.single('file'), async (req, res) => {
     var _a, _b, _c;
-    logger.info('req.body: ', req.body);
+    logger.info('req.body.inputUrlRef: ', req.body.inputUrlRef);
     if (!req.file && !req.body.inputUrlRef) {
         return res.status(400).send({ message: 'No data provided' });
     }
@@ -154,8 +154,11 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            logger.error(err);
+            logger.error('Error with inputUrlRef: ', err);
         }
+    }
+    else {
+        logger.error('inputUrlRef is invalid: ', req.body.inputUrlRef);
     }
     if (mp3Buffer && mp3Buffer.length > FIVE_MINUTES) {
         logger.error('File is too large');
@@ -181,7 +184,6 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
     }
     catch (err) {
         logger.error("Error when uploading to S3: ", err);
-        console.error("error when uploading to S3: ", err);
     }
     setTimeout(async () => {
         logger.info("Receiving content from S3, uploading to Transcribe");
