@@ -152,6 +152,7 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
  * req is the request parameter send by the frontend. res is the reponse returned to the frontend.
  */
 app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
+    logger.info('req.body: ', req.body);
     if (!req.file && !req.body.inputUrlRef) {
         return res.status(400).send({ message: 'No data provided' });
     }

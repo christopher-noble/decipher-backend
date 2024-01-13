@@ -139,6 +139,7 @@ const getTranscriptionDetails = async (params) => {
  */
 app.post('/transcribe', upload.single('file'), async (req, res) => {
     var _a, _b, _c;
+    logger.info('req.body: ', req.body);
     if (!req.file && !req.body.inputUrlRef) {
         return res.status(400).send({ message: 'No data provided' });
     }
