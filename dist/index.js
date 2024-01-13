@@ -64,6 +64,7 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef) => {
         params: { id: inputUrlRef },
         headers: rapidApiCreds
     };
+    logger.info('options: ', options);
     const response = await (0, axios_1.default)(options); //GET request
     const mp3Url = response.data.link;
     if (response.data.link) {
