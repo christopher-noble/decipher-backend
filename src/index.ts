@@ -214,7 +214,7 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             const fullDataResponse = { fullTranscript, transcriptTimestampMap };
             res.send(fullDataResponse);
         } catch (err) {
-            logger.error("Error at final stage: ", err);
+            logger.error("Error at final stage: ");
         }
     }, 2500);
 });

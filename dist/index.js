@@ -194,7 +194,7 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
             res.send(fullDataResponse);
         }
         catch (err) {
-            logger.error("Error at final stage: ", err);
+            logger.error("Error at final stage: ");
         }
     }, 2500);
 });
