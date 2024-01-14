@@ -14,9 +14,8 @@ const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const serverless = require('serverless-http');
 require('dotenv').config();
-// const logger = require('./utils/logging');
-// logger.info('Starting up...');
-console.log("Starting up...");
+const logger = require('./utils/logging');
+logger.info('Starting up...');
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
@@ -65,9 +64,8 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef) => {
         params: { id: inputUrlRef },
         headers: rapidApiCreds
     };
-    // logger.info('inputUrlRef: ', inputUrlRef);
-    console.log("inputUrlRef: ", inputUrlRef);
-    const response = await (0, axios_1.default)(options); //GET request
+    logger.info('inputUrlRef: ', inputUrlRef);
+    const response = await (0, axios_1.default)(options); //GET request to Youtube to mp3
     const mp3Url = response.data.link;
     if (response.data.link) {
         if (!fs_1.default.existsSync(downloadsFolder)) {
@@ -76,11 +74,11 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef) => {
         const fileName = path_1.default.basename(new URL(mp3Url).pathname);
         const savePath = path_1.default.join(downloadsFolder, fileName);
         try {
-            console.log("mp3Url: ", mp3Url);
+            logger.info("mp3Url: ", mp3Url);
             const writer = fs_1.default.createWriteStream(savePath); //save the downloaded MP3 file in downloads folder
             await axios_1.default.get(mp3Url, { responseType: 'stream' }) //download the MP3 file in chunks
                 .then(response => response.data.pipe(writer))
-                .catch((err) => console.log("error getting mp3 audio:", err));
+                .catch((err) => logger.error("error getting mp3 audio:", err));
             //finally the MP3 file is read from the downloads directory, and function returns the file content in buffer format
             return new Promise((resolve, reject) => {
                 writer.on('finish', () => resolve(fs_1.default.readFileSync(`./downloads/${fileName}`))); //convert the MP3 file into a buffer
@@ -88,8 +86,7 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef) => {
             });
         }
         catch (err) {
-            // logger.error('Error on writing/converting mp3');
-            console.log("error on writing/converting mp3: ", err);
+            logger.error('Error on writing/converting mp3', err);
         }
     }
 };
@@ -104,8 +101,7 @@ const getTranscriptionDetails = async (params) => {
             const data = await transcribeClient.send(new client_transcribe_1.GetTranscriptionJobCommand(params));
             const status = (_a = data.TranscriptionJob) === null || _a === void 0 ? void 0 : _a.TranscriptionJobStatus;
             if (status === "COMPLETED") {
-                // logger.info('Completed!');
-                console.log("completed!");
+                logger.info('Completed!');
                 const response = await s3Client.send(command);
                 const result = await ((_b = response.Body) === null || _b === void 0 ? void 0 : _b.transformToString());
                 if (result) {
@@ -119,26 +115,22 @@ const getTranscriptionDetails = async (params) => {
                     resolve();
                 }
                 else {
-                    // logger.info('There is no result returned from S3');
-                    console.log("There is no result returned from S3");
+                    logger.info('There is no result returned from S3');
                 }
             }
             else if (status === "FAILED") {
-                // logger.info('Transcription Failed: ' + data.TranscriptionJob?.FailureReason);
-                console.log("Transcription failed: ", (_c = data.TranscriptionJob) === null || _c === void 0 ? void 0 : _c.FailureReason);
+                logger.info('Transcription Failed: ' + ((_c = data.TranscriptionJob) === null || _c === void 0 ? void 0 : _c.FailureReason));
                 reject((_d = data.TranscriptionJob) === null || _d === void 0 ? void 0 : _d.FailureReason);
             }
             else {
-                // logger.info('In Progress...');
-                console.log("In Progress...");
+                logger.info("In Progress...");
                 setTimeout(() => {
                     getTranscriptionDetails(params).then(resolve).catch(reject);
                 }, 2000);
             }
         }
         catch (err) {
-            // logger.error('Error on transcription process');
-            console.log("Error on transcription process");
+            logger.error('Error on transcription process: ', err);
         }
     });
 };
@@ -148,14 +140,12 @@ const getTranscriptionDetails = async (params) => {
  */
 app.post('/transcribe', upload.single('file'), async (req, res) => {
     var _a, _b, _c;
-    // logger.info('req.body.inputUrlRef: ', req.body.inputUrlRef);
-    console.log("req.body.inputUrlRef: ", req.body.inputUrlRef);
+    logger.info("req.body.inputUrlRef: ", req.body.inputUrlRef);
     if (!req.file && !req.body.inputUrlRef) {
         return res.status(400).send({ message: 'No data provided' });
     }
     if (req.file && req.file.size > FIVE_MINUTES) {
-        // logger.error('File is too large');
-        console.log("file is too large");
+        logger.error('File is too large');
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
     let mp3Buffer = (_a = req.file) === null || _a === void 0 ? void 0 : _a.buffer;
@@ -165,20 +155,17 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            // logger.error('Error with inputUrlRef: ');
-            console.log('Error with inputUrlRef: ');
+            logger.error('Error with inputUrlRef: ', err);
         }
     }
     else {
-        // logger.error('inputUrlRef is invalid: ', req.body.inputUrlRef);
-        console.log("inputUrlRef is invalid: ", req.body.inputUrlRef);
+        logger.error('inputUrlRef is invalid: ', req.body.inputUrlRef);
     }
     if (mp3Buffer && mp3Buffer.length > FIVE_MINUTES) {
-        // logger.error('File is too large');
-        console.log("error: file is too large");
+        logger.error('File is too large');
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
-    // logger.info('req.body.jobName: ', req.body.jobName);
+    logger.info('req.body.jobName: ', req.body.jobName);
     const params = {
         TranscriptionJobName: req.body.jobName,
         LanguageCode: "en-US",
@@ -197,12 +184,10 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
         await s3Client.send(command);
     }
     catch (err) {
-        // logger.error("Error when uploading to S3: ", err);
-        console.log("error when uploading to s3: ", err);
+        logger.error("Error when uploading to S3: ", err);
     }
     setTimeout(async () => {
-        // logger.info("Receiving content from S3, uploading to Transcribe")
-        console.log("Receiving content from S3, uploading to Transcribe");
+        logger.info("Receiving content from S3, uploading to Transcribe");
         try {
             await transcribeClient.send(new client_transcribe_1.StartTranscriptionJobCommand(params));
             await getTranscriptionDetails(params);
@@ -215,13 +200,11 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
             }
         }
         catch (err) {
-            // logger.error("Error at final stage: ");
-            console.log("error at final stage: ", err);
+            logger.error("Error at final stage: ", err);
         }
     }, 2500);
 });
 app.listen(3000, '0.0.0.0', () => {
-    // logger.info('Server is running');
-    console.log("Server is running");
+    logger.info('Server is running on port 3000...');
 });
 module.exports.handler = serverless(app);
