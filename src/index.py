@@ -11,6 +11,7 @@ BUCKET_NAME = "decipher-audio-files"
 S3_CLIENT = boto3.client('s3')
 TRANSCRIBE_CLIENT = boto3.client('transcribe', region_name='us-west-2')
 FILE_MAX_DURATION_SECONDS = 300
+MAX_RETRIEVE_ATTEMPTS = 50
 YOUTUBE_URL_BASE = "https://www.youtube.com/watch?v="
 
 
@@ -40,7 +41,7 @@ def get_completed_transcript(bucket_name, object_key):
 # Get the result. Max 50 attempts (for now).
 def get_transcription_job_result(job_name):
     attempts = 0
-    while attempts < 50:
+    while attempts < MAX_RETRIEVE_ATTEMPTS:
         job_status_result = TRANSCRIBE_CLIENT.get_transcription_job(TranscriptionJobName=job_name)
         if 'TranscriptionJob' in job_status_result:
             if job_status_result['TranscriptionJob']['TranscriptionJobStatus'] == 'COMPLETED':
