@@ -37,7 +37,7 @@ def get_completed_transcript(bucket_name, object_key):
     return transcription_result
 
 
-# Get the result. Iterate until we hit an exception or return something (for now..)
+# Get the result. Max 50 attempts (for now).
 def get_transcription_job_result(job_name):
     attempts = 0
     while attempts < 50:
