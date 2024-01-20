@@ -1,10 +1,10 @@
-from flask import Flask, request, jsonify, Response
-from flask_cors import CORS, cross_origin
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
 import time
 import json
 from pytube import YouTube
+import os
 
 
 BUCKET_NAME = "decipher-audio-files"
@@ -19,66 +19,33 @@ app = Flask(__name__)
 CORS(app, resources={r"/transcribe": {"origins": "http://localhost:3000"}})
 
 
-# Upload a file object to s3
-def upload_to_s3(file_stream, bucket_name, object_key):
-    try:
-        S3_CLIENT.upload_fileobj(file_stream, bucket_name, object_key)
-        return f'Successfully uploaded to S3: s3://{bucket_name}/{object_key}'
-
-    except (BotoCoreError, ClientError) as e:
-        return str(e)
-
-
 # Start a transcription job
 def start_transcription_job(bucket_name, object_key, job_name, language_code='en-US'):
-    try:
-        response = TRANSCRIBE_CLIENT.start_transcription_job(
-            TranscriptionJobName=job_name,
-            LanguageCode=language_code,
-            MediaFormat='mp3',  # replace with your audio format
-            Media={'MediaFileUri': f's3://{bucket_name}/{object_key}'},
-            OutputBucketName=bucket_name  # specify the bucket for the transcription output
-        )
-        return response
-
-    except (BotoCoreError, ClientError) as e:
-        return str(e)
-
-
-# Retrieve the transcription job status
-def get_transcription_job_status(job_name):
-    try:
-        response = TRANSCRIBE_CLIENT.get_transcription_job(TranscriptionJobName=job_name)
-        return response
-
-    except (BotoCoreError, ClientError) as e:
-        return str(e)
+    TRANSCRIBE_CLIENT.start_transcription_job(
+        TranscriptionJobName=job_name,
+        LanguageCode=language_code,
+        MediaFormat='mp3',  # replace with your audio format
+        Media={'MediaFileUri': f's3://{bucket_name}/{object_key}'},
+        OutputBucketName=bucket_name  # specify the bucket for the transcription output
+    )
 
 
 # Download the json once the job is complete
 def get_completed_transcript(bucket_name, object_key):
-    try:
-        response = S3_CLIENT.get_object(Bucket=bucket_name, Key=object_key)
-        transcription_result = response['Body'].read().decode('utf-8')
-        return transcription_result
-
-    except NoCredentialsError:
-        return 'AWS credentials not available'
-
-    except Exception as e:
-        return str(e)
+    response = S3_CLIENT.get_object(Bucket=bucket_name, Key=object_key)
+    transcription_result = response['Body'].read().decode('utf-8')
+    return transcription_result
 
 
 # Get the result. Iterate until we hit an exception or return something (for now..)
 def get_transcription_job_result(job_name):
-    while True:
-        try:
-            job_status_result = get_transcription_job_status(job_name)
+    attempts = 0
+    while attempts < 50:
+        job_status_result = TRANSCRIBE_CLIENT.get_transcription_job(TranscriptionJobName=job_name)
+        if 'TranscriptionJob' in job_status_result:
+            if job_status_result['TranscriptionJob']['TranscriptionJobStatus'] == 'COMPLETED':
 
-            if 'TranscriptionJob' in job_status_result and job_status_result['TranscriptionJob'][
-                'TranscriptionJobStatus'] == 'COMPLETED':
                 print("Job Complete!")
-
                 object_key = f'{job_name}.json'
                 transcription_result = get_completed_transcript(BUCKET_NAME, object_key)
                 transcription_result_dict = json.loads(transcription_result)
@@ -88,32 +55,32 @@ def get_transcription_job_result(job_name):
                 keyword_timestamp_map = []
                 for item in items:
                     keyword_timestamp_map.append({'keyword': item['alternatives'][0]['content'],
-                                                  'timestamp': item[
-                                                      'start_time'] if 'start_time' in item.keys() else ''})
+                                                  'timestamp': item['start_time'] if 'start_time' in item.keys()
+                                                  else ''})
 
                 return jsonify({'fullTranscript': full_transcript,
                                 'transcriptTimestampMap': keyword_timestamp_map})
 
-            elif 'TranscriptionJob' in job_status_result:
-                if job_status_result['TranscriptionJob']['TranscriptionJobStatus'] == 'FAILED':
-                    print("Job Failed.")
-                    return jsonify({'error': "e"}), 500
+            elif job_status_result['TranscriptionJob']['TranscriptionJobStatus'] == 'FAILED':
+                print("Job Failed.")
+                return jsonify({'error': "Transcription Job Failed."}), 500
 
-                print("Job found, AWS Status: " + job_status_result['TranscriptionJob']['TranscriptionJobStatus'])
-                time.sleep(3)
             else:
-                print("Unable to find transcription job")
-                return jsonify({'error': 'Transcription job not found'})
+                print("Job found, AWS Status: " + job_status_result['TranscriptionJob']['TranscriptionJobStatus'])
+                attempts += 1
+                time.sleep(2)
+        else:
+            print("Unable to find transcription job")
+            return jsonify({'error': 'Transcription job not found'})
 
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+    return jsonify({'error': 'Exceeded limit of retrieve transcription attempts.'})
 
 
 # root/endpoint: /transcribe
 # @app.route decorator - called whenever a request hits the server with this path
+# Request Content-Type: multipart/formData
 @app.route('/transcribe', methods=['POST'])
 def transcribe():
-    # Handling Content-Type: multipart/formData
     try:
         # File Upload Transcription Logic
         if 'file' in request.files:
@@ -128,13 +95,18 @@ def transcribe():
 
             # TODO validate length
             try:
-                upload_result = upload_to_s3(file_object, BUCKET_NAME, file.filename)
-                job = start_transcription_job(BUCKET_NAME, object_key, job_name)
-                result = get_transcription_job_result(job_name)
-                return result
+                S3_CLIENT.upload_fileobj(file_object, BUCKET_NAME, file.filename)
+                start_transcription_job(BUCKET_NAME, object_key, job_name)
+
+                try:
+                    result = get_transcription_job_result(job_name)
+                    return result
+                except Exception as e:
+                    return jsonify({'error': f"Exception encountered while retrieving transcript. error: {str(e)}"})
 
             except Exception as e:
-                return jsonify({'error': str(e)})
+                return jsonify({'error': f"Exception encountered while uploading MP3 to S3 and starting job."
+                                         f"error: {str(e)}"})
 
         # YouTube Transcription Logic
         # TODO validate length
@@ -150,20 +122,31 @@ def transcribe():
 
                 try:
                     with open(f"{input_url}.mp3", "rb") as f:
-                        upload_result = upload_to_s3(f, BUCKET_NAME, object_key)
-                    job = start_transcription_job(BUCKET_NAME, object_key, job_name)
-                    result = get_transcription_job_result(job_name)
-                    return result
+                        S3_CLIENT.upload_fileobj(f, BUCKET_NAME, object_key)
+                    start_transcription_job(BUCKET_NAME, object_key, job_name)
+
+                    # Delete the file.
+                    location = "C:/Users/joels/PycharmProjects/decipher-backend/"
+                    path = os.path.join(location, object_key)
+                    os.remove(path)
+
+                    try:
+                        result = get_transcription_job_result(job_name)
+                        return result
+                    except Exception as e:
+                        return jsonify({'error': f"Exception encountered while retrieving transcript. error: {str(e)}"})
 
                 except Exception as e:
-                    return jsonify({'error': f"Exception processing converted file. error: {str(e)}"})
+                    return jsonify({'error': f"Exception encountered while uploading MP3 to S3 and starting job."
+                                             f"error: {str(e)}"})
 
-            except KeyError:
-                return jsonify({"error": "Unable to fetch video information."
-                                         "Please check the video URL or your network connection."})
+            except Exception as e:
+                return jsonify({"error": f"Exception encountered while converting YT to MP3."
+                                         f"Please check the video URL or your network connection."
+                                         f"error: {str(e)}"})
 
         else:
-            return jsonify({"error": "No file found"}), 400
+            return jsonify({"error": "No file found"}), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
