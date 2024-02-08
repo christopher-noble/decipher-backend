@@ -1,8 +1,13 @@
 import { AWS_REGION } from "../utils/constants";
+import dotenv from 'dotenv';
+dotenv.config();
 
 export const rapidApiCreds = {
-    'X-RapidAPI-Key': process.env.X_RAPID_API_KEY,
-    'X-RapidAPI-Host': process.env.X_RAPID_API_HOST
+    apiUrl: process.env.X_RAPID_API_URL,
+    headers: {
+        'X-RapidAPI-Key' : process.env.X_RAPID_API_KEY,
+        'X-RapidAPI-Host' : process.env.X_RAPID_API_HOST,
+    }
 };
 
 export const awsCreds = {

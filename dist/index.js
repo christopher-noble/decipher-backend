@@ -5,7 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_transcribe_1 = require("@aws-sdk/client-transcribe");
 const client_s3_1 = require("@aws-sdk/client-s3");
-const utils_1 = require("./utils/utils");
+const helpers_1 = require("./utils/helpers");
+const apiKeys_1 = require("./config/apiKeys");
+const constants_1 = require("./utils/constants");
 const express_1 = __importDefault(require("express"));
 const axios_1 = __importDefault(require("axios"));
 const cors_1 = __importDefault(require("cors"));
@@ -15,35 +17,20 @@ const path_1 = __importDefault(require("path"));
 const serverless = require('serverless-http');
 require('dotenv').config();
 const logger = require('./utils/logging');
-logger.info('Starting up...');
+logger.info(constants_1.SERVER_STARTING_UP);
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 const storage = multer_1.default.memoryStorage();
-const FIVE_MINUTES = 5 * 1024 * 1024;
 const upload = (0, multer_1.default)({
     storage: storage,
     limits: {
-        fileSize: FIVE_MINUTES // 5MB (5 mins) limit
+        fileSize: constants_1.FIVE_MINUTES // 5MB (5 mins) limit
     }
 });
-const downloadsFolder = './downloads';
-(0, utils_1.clearDirectory)(downloadsFolder); // make sure the downloads folder is empty
-const AUDIO_TOO_LARGE = 'Audio must be under 5 minutes (beta)';
-const rapidApiCreds = {
-    'X-RapidAPI-Key': process.env.X_RAPID_API_KEY,
-    'X-RapidAPI-Host': process.env.X_RAPID_API_HOST
-};
-const awsCreds = {
-    region: 'us-west-2',
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }
-};
-const s3BucketName = 'decipher-audio-files';
-const transcribeClient = new client_transcribe_1.TranscribeClient(awsCreds); //initialize AWS SDK with our creds
-const s3Client = new client_s3_1.S3Client(awsCreds);
+(0, helpers_1.clearDirectory)(constants_1.DOWNLOADS_FOLDER); // make sure the downloads folder is empty
+const transcribeClient = new client_transcribe_1.TranscribeClient(apiKeys_1.awsCreds); //initialize AWS SDK with our creds
+const s3Client = new client_s3_1.S3Client(apiKeys_1.awsCreds);
 let transcriptTimestampMap = [];
 let fullTranscript = [];
 /**
@@ -57,44 +44,52 @@ let fullTranscript = [];
  * The new audio file is temporarily stored in /downloads before being converted and returned in buffer format.
  */
 const convertYoutubeUrlToMp3 = async (inputUrlRef) => {
-    (0, utils_1.clearDirectory)(downloadsFolder); // make sure the downloads folder is empty.
+    (0, helpers_1.clearDirectory)(constants_1.DOWNLOADS_FOLDER); // make sure the downloads folder is empty.
+    console.log("inputUrlRef IN CONVERT YOUTUBE: ", inputUrlRef);
     const options = {
         method: 'GET',
-        url: 'https://youtube-mp36.p.rapidapi.com/dl',
+        url: apiKeys_1.rapidApiCreds.apiUrl,
         params: { id: inputUrlRef },
-        headers: rapidApiCreds
+        headers: apiKeys_1.rapidApiCreds.headers
     };
+    console.log("options: ", options);
     logger.info('inputUrlRef: ', inputUrlRef);
-    const response = await (0, axios_1.default)(options); //GET request to Youtube to mp3
-    const mp3Url = response.data.link;
-    if (response.data.link) {
-        if (!fs_1.default.existsSync(downloadsFolder)) {
-            fs_1.default.mkdirSync(downloadsFolder, { recursive: true });
+    try {
+        const response = await axios_1.default.request(options); //GET request to Youtube to mp3
+        console.log(response.data);
+        const mp3Url = response.data.link;
+        if (response.data.link) {
+            if (!fs_1.default.existsSync(constants_1.DOWNLOADS_FOLDER)) {
+                fs_1.default.mkdirSync(constants_1.DOWNLOADS_FOLDER, { recursive: true });
+            }
+            const fileName = path_1.default.basename(new URL(mp3Url).pathname);
+            const savePath = path_1.default.join(constants_1.DOWNLOADS_FOLDER, fileName);
+            try {
+                logger.info("mp3Url: ", mp3Url);
+                const writer = fs_1.default.createWriteStream(savePath); //save the downloaded MP3 file in downloads folder
+                await axios_1.default.get(mp3Url, { responseType: 'stream' }) //download the MP3 file in chunks
+                    .then(response => response.data.pipe(writer))
+                    .catch((err) => logger.error("error getting mp3 audio:", err));
+                //finally the MP3 file is read from the downloads directory, and function returns the file content in buffer format
+                return new Promise((resolve, reject) => {
+                    writer.on('finish', () => resolve(fs_1.default.readFileSync(`./downloads/${fileName}`))); //convert the MP3 file into a buffer
+                    writer.on('error', reject);
+                });
+            }
+            catch (err) {
+                logger.error('Error on writing/converting mp3', err);
+            }
         }
-        const fileName = path_1.default.basename(new URL(mp3Url).pathname);
-        const savePath = path_1.default.join(downloadsFolder, fileName);
-        try {
-            logger.info("mp3Url: ", mp3Url);
-            const writer = fs_1.default.createWriteStream(savePath); //save the downloaded MP3 file in downloads folder
-            await axios_1.default.get(mp3Url, { responseType: 'stream' }) //download the MP3 file in chunks
-                .then(response => response.data.pipe(writer))
-                .catch((err) => logger.error("error getting mp3 audio:", err));
-            //finally the MP3 file is read from the downloads directory, and function returns the file content in buffer format
-            return new Promise((resolve, reject) => {
-                writer.on('finish', () => resolve(fs_1.default.readFileSync(`./downloads/${fileName}`))); //convert the MP3 file into a buffer
-                writer.on('error', reject);
-            });
-        }
-        catch (err) {
-            logger.error('Error on writing/converting mp3', err);
-        }
+    }
+    catch (error) {
+        console.error(error);
     }
 };
 const getTranscriptionDetails = async (params) => {
     return new Promise(async (resolve, reject) => {
         var _a, _b, _c, _d;
         const command = new client_s3_1.GetObjectCommand({
-            Bucket: s3BucketName,
+            Bucket: constants_1.S3_BUCKET_NAME,
             Key: `${params.TranscriptionJobName}.json`
         });
         try {
@@ -119,18 +114,18 @@ const getTranscriptionDetails = async (params) => {
                 }
             }
             else if (status === "FAILED") {
-                logger.info('Transcription Failed: ' + ((_c = data.TranscriptionJob) === null || _c === void 0 ? void 0 : _c.FailureReason));
+                logger.info(constants_1.ERROR_MESSAGES.TRANSCRIPTION_FAILED + ((_c = data.TranscriptionJob) === null || _c === void 0 ? void 0 : _c.FailureReason));
                 reject((_d = data.TranscriptionJob) === null || _d === void 0 ? void 0 : _d.FailureReason);
             }
             else {
-                logger.info("In Progress...");
+                logger.info(constants_1.IN_PROGRESS);
                 setTimeout(() => {
                     getTranscriptionDetails(params).then(resolve).catch(reject);
                 }, 2000);
             }
         }
         catch (err) {
-            logger.error('Error on transcription process: ', err);
+            logger.error(constants_1.ERROR_MESSAGES.TRANSCRIPTION_ERROR, err);
         }
     });
 };
@@ -142,28 +137,26 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
     var _a, _b, _c;
     logger.info("req.body.inputUrlRef: ", req.body.inputUrlRef);
     if (!req.file && !req.body.inputUrlRef) {
-        return res.status(400).send({ message: 'No data provided' });
+        return res.status(400).send({ message: constants_1.ERROR_MESSAGES.NO_DATA_FOUND });
     }
-    if (req.file && req.file.size > FIVE_MINUTES) {
-        logger.error('File is too large');
-        return res.status(400).send({ message: AUDIO_TOO_LARGE });
+    if (req.file && req.file.size > constants_1.FIVE_MINUTES) {
+        logger.error(constants_1.ERROR_MESSAGES.FILE_TOO_LARGE);
+        return res.status(400).send({ message: constants_1.AUDIO_TOO_LARGE });
     }
     let mp3Buffer = (_a = req.file) === null || _a === void 0 ? void 0 : _a.buffer;
     let s3key = ((_b = req.file) === null || _b === void 0 ? void 0 : _b.originalname) || `${req.body.inputUrlRef}.mp3`;
     if (((_c = req.body.inputUrlRef) === null || _c === void 0 ? void 0 : _c.length) > 1) {
+        console.log("req.body.inputUrlRef: ", req.body.inputUrlRef);
         try {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            logger.error('Error with inputUrlRef: ', err);
+            logger.error(constants_1.ERROR_MESSAGES.INVALID_YOUTUBE_URL, err);
         }
     }
-    else {
-        logger.error('inputUrlRef is invalid: ', req.body.inputUrlRef);
-    }
-    if (mp3Buffer && mp3Buffer.length > FIVE_MINUTES) {
-        logger.error('File is too large');
-        return res.status(400).send({ message: AUDIO_TOO_LARGE });
+    if (mp3Buffer && mp3Buffer.length > constants_1.FIVE_MINUTES) {
+        logger.error(constants_1.ERROR_MESSAGES.FILE_TOO_LARGE);
+        return res.status(400).send({ message: constants_1.AUDIO_TOO_LARGE });
     }
     logger.info('req.body.jobName: ', req.body.jobName);
     const params = {
@@ -171,12 +164,12 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
         LanguageCode: "en-US",
         MediaFormat: "mp3",
         Media: {
-            MediaFileUri: `s3://decipher-audio-files/${s3key}`,
+            MediaFileUri: constants_1.S3_BUCKET_URL + s3key,
         },
-        OutputBucketName: s3BucketName
+        OutputBucketName: constants_1.S3_BUCKET_NAME
     };
     const command = new client_s3_1.PutObjectCommand({
-        Bucket: s3BucketName,
+        Bucket: constants_1.S3_BUCKET_NAME,
         Key: s3key,
         Body: mp3Buffer,
     });
@@ -184,10 +177,10 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
         await s3Client.send(command);
     }
     catch (err) {
-        logger.error("Error when uploading to S3: ", err);
+        logger.error(constants_1.ERROR_MESSAGES.S3_UPLOAD_ERROR, err);
     }
     setTimeout(async () => {
-        logger.info("Receiving content from S3, uploading to Transcribe");
+        logger.info(constants_1.TRANSCRIBE_UPLOAD);
         try {
             await transcribeClient.send(new client_transcribe_1.StartTranscriptionJobCommand(params));
             await getTranscriptionDetails(params);
@@ -196,15 +189,15 @@ app.post('/transcribe', upload.single('file'), async (req, res) => {
                 res.send(fullDataResponse);
             }
             else {
-                res.send('Unable to process transcript');
+                res.send(constants_1.ERROR_MESSAGES.TRANSCRIPTION_ERROR);
             }
         }
         catch (err) {
-            logger.error("Error at final stage: ", err);
+            logger.error(constants_1.ERROR_MESSAGES.FINAL_STAGE_ERROR, err);
         }
     }, 2500);
 });
-app.listen(3000, '0.0.0.0', () => {
-    logger.info('Server is running on port 3000...');
+app.listen(constants_1.PORT, '0.0.0.0', () => {
+    logger.info(constants_1.SERVER_RUNNING);
 });
 module.exports.handler = serverless(app);

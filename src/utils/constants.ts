@@ -5,7 +5,6 @@ export const S3_BUCKET_URL = 's3://decipher-audio-files/';
 export const DOWNLOADS_FOLDER = './downloads';
 export const PORT = 3000;
 export const AWS_REGION = 'us-west-2';
-export const RAPID_URL = 'https://youtube-mp36.p.rapidapi.com/dl';
 export const SERVER_STARTING_UP = `Server is starting up...`;
 export const SERVER_RUNNING = `Server is running on port ${PORT}...`;
 export const TRANSCRIBE_UPLOAD = 'Receiving content from S3, uploading to Transcribe';

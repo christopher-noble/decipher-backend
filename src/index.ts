@@ -3,7 +3,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3
 import { KeywordTimestamp, TranscriptionParams, TranscriptionResult } from './types/interfaces';
 import { clearDirectory } from './utils/helpers';
 import { awsCreds, rapidApiCreds } from './config/apiKeys';
-import { FIVE_MINUTES, AUDIO_TOO_LARGE, S3_BUCKET_NAME, DOWNLOADS_FOLDER, ERROR_MESSAGES, SERVER_RUNNING, SERVER_STARTING_UP, RAPID_URL, S3_BUCKET_URL, PORT, TRANSCRIBE_UPLOAD, IN_PROGRESS } from "./utils/constants";
+import { FIVE_MINUTES, AUDIO_TOO_LARGE, S3_BUCKET_NAME, DOWNLOADS_FOLDER, ERROR_MESSAGES, SERVER_RUNNING, SERVER_STARTING_UP, S3_BUCKET_URL, PORT, TRANSCRIBE_UPLOAD, IN_PROGRESS } from "./utils/constants";
 import express from 'express';
 import axios from 'axios';
 import cors from 'cors';
@@ -50,39 +50,42 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
 
     const options = {
         method: 'GET',
-        url: RAPID_URL,
+        url: rapidApiCreds.apiUrl,
         params: { id: inputUrlRef },
-        headers: rapidApiCreds
+        headers: rapidApiCreds.headers
     };
 
-    logger.info('inputUrlRef: ', inputUrlRef);
+    try {
+        const response = await axios.request(options); //GET request to Youtube to mp3
+        console.log(response.data);
+        const mp3Url = response.data.link;
 
-    const response = await axios(options); //GET request to Youtube to mp3
-    const mp3Url = response.data.link;
+        if (response.data.link) {
+            if (!fs.existsSync(DOWNLOADS_FOLDER)) {
+                fs.mkdirSync(DOWNLOADS_FOLDER, { recursive: true });
+            }
 
-    if (response.data.link) {
-        if (!fs.existsSync(DOWNLOADS_FOLDER)) {
-            fs.mkdirSync(DOWNLOADS_FOLDER, { recursive: true });
+            const fileName = path.basename(new URL(mp3Url).pathname);
+            const savePath = path.join(DOWNLOADS_FOLDER, fileName);
+
+            try {
+                const writer = fs.createWriteStream(savePath);//save the downloaded MP3 file in downloads folder
+                await axios.get(mp3Url, { responseType: 'stream' }) //download the MP3 file in chunks
+                    .then(response => response.data.pipe(writer))
+                    .catch((err) => logger.error(ERROR_MESSAGES.NO_DATA_FOUND, err));
+
+                //finally the MP3 file is read from the downloads directory, and function returns the file content in buffer format
+                return new Promise((resolve, reject) => {
+                    writer.on('finish', () => resolve(fs.readFileSync(`./downloads/${fileName}`))); //convert the MP3 file into a buffer
+                    writer.on('error', reject);
+                });
+            } catch (err) {
+                logger.error(ERROR_MESSAGES.NO_DATA_FOUND, err);
+            }
         }
 
-        const fileName = path.basename(new URL(mp3Url).pathname);
-        const savePath = path.join(DOWNLOADS_FOLDER, fileName);
-
-        try {
-            logger.info("mp3Url: ", mp3Url);
-            const writer = fs.createWriteStream(savePath);//save the downloaded MP3 file in downloads folder
-            await axios.get(mp3Url, { responseType: 'stream' }) //download the MP3 file in chunks
-            .then(response => response.data.pipe(writer))
-            .catch((err) => logger.error("error getting mp3 audio:", err));
-
-            //finally the MP3 file is read from the downloads directory, and function returns the file content in buffer format
-            return new Promise((resolve, reject) => {
-                writer.on('finish', () => resolve(fs.readFileSync(`./downloads/${fileName}`))); //convert the MP3 file into a buffer
-                writer.on('error', reject);
-            });
-        } catch (err) {
-            logger.error('Error on writing/converting mp3', err);
-        }
+    } catch (error) {
+        console.error(error);
     }
 }
 
@@ -113,7 +116,7 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
                     resolve();
                 }
                 else {
-                    logger.info('There is no result returned from S3');
+                    logger.info(ERROR_MESSAGES.NO_DATA_FOUND);
                 }
 
             } else if (status === "FAILED") {
@@ -136,7 +139,6 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
  * req is the request parameter send by the frontend. res is the reponse returned to the frontend.
  */
 app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
-    logger.info("req.body.inputUrlRef: ", req.body.inputUrlRef);
     if (!req.file && !req.body.inputUrlRef) {
         return res.status(400).send({ message: ERROR_MESSAGES.NO_DATA_FOUND });
     }
@@ -161,8 +163,6 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
         logger.error(ERROR_MESSAGES.FILE_TOO_LARGE);
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
-
-    logger.info('req.body.jobName: ', req.body.jobName);
 
     const params = {
         TranscriptionJobName: req.body.jobName,
