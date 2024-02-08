@@ -1,0 +1,1 @@
+// defines the Trancription table schema in RDS

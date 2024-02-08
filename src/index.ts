@@ -1,7 +1,9 @@
 import { StartTranscriptionJobCommand, GetTranscriptionJobCommand, TranscribeClient } from "@aws-sdk/client-transcribe";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { KeywordTimestamp, TranscriptionParams, TranscriptionResult } from './utils/interfaces';
-import { clearDirectory } from './utils/utils';
+import { KeywordTimestamp, TranscriptionParams, TranscriptionResult } from './types/interfaces';
+import { clearDirectory } from './utils/helpers';
+import { awsCreds, rapidApiCreds } from './config/apiKeys';
+import { FIVE_MINUTES, AUDIO_TOO_LARGE, S3_BUCKET_NAME, DOWNLOADS_FOLDER, ERROR_MESSAGES, SERVER_RUNNING, SERVER_STARTING_UP, RAPID_URL, S3_BUCKET_URL, PORT, TRANSCRIBE_UPLOAD, IN_PROGRESS } from "./utils/constants";
 import express from 'express';
 import axios from 'axios';
 import cors from 'cors';
@@ -12,14 +14,12 @@ const serverless = require('serverless-http');
 require('dotenv').config();
 const logger = require('./utils/logging');
 
-logger.info('Starting up...');
+logger.info(SERVER_STARTING_UP);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 const storage = multer.memoryStorage();
-
-const FIVE_MINUTES = 5 * 1024 * 1024;
 
 const upload = multer({
     storage: storage,
@@ -27,24 +27,9 @@ const upload = multer({
         fileSize: FIVE_MINUTES  // 5MB (5 mins) limit
     }
 });
-const downloadsFolder = './downloads';
-clearDirectory(downloadsFolder) // make sure the downloads folder is empty
-const AUDIO_TOO_LARGE = 'Audio must be under 5 minutes (beta)';
 
-const rapidApiCreds = {
-    'X-RapidAPI-Key': process.env.X_RAPID_API_KEY,
-    'X-RapidAPI-Host': process.env.X_RAPID_API_HOST
-};
+clearDirectory(DOWNLOADS_FOLDER) // make sure the downloads folder is empty
 
-const awsCreds = {
-    region: 'us-west-2',
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    }
-}
-
-const s3BucketName = 'decipher-audio-files';
 const transcribeClient = new TranscribeClient(awsCreds); //initialize AWS SDK with our creds
 const s3Client = new S3Client(awsCreds);
 let transcriptTimestampMap: KeywordTimestamp[] = [];
@@ -61,11 +46,11 @@ let fullTranscript: string[] = [];
  * The new audio file is temporarily stored in /downloads before being converted and returned in buffer format.
  */
 const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
-    clearDirectory(downloadsFolder) // make sure the downloads folder is empty.
+    clearDirectory(DOWNLOADS_FOLDER) // make sure the downloads folder is empty.
 
     const options = {
         method: 'GET',
-        url: 'https://youtube-mp36.p.rapidapi.com/dl',
+        url: RAPID_URL,
         params: { id: inputUrlRef },
         headers: rapidApiCreds
     };
@@ -76,12 +61,12 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
     const mp3Url = response.data.link;
 
     if (response.data.link) {
-        if (!fs.existsSync(downloadsFolder)) {
-            fs.mkdirSync(downloadsFolder, { recursive: true });
+        if (!fs.existsSync(DOWNLOADS_FOLDER)) {
+            fs.mkdirSync(DOWNLOADS_FOLDER, { recursive: true });
         }
 
         const fileName = path.basename(new URL(mp3Url).pathname);
-        const savePath = path.join(downloadsFolder, fileName);
+        const savePath = path.join(DOWNLOADS_FOLDER, fileName);
 
         try {
             logger.info("mp3Url: ", mp3Url);
@@ -104,7 +89,7 @@ const convertYoutubeUrlToMp3 = async (inputUrlRef: string) => {
 const getTranscriptionDetails = async (params: TranscriptionParams): Promise<void> => {
     return new Promise(async (resolve, reject) => {
         const command = new GetObjectCommand({
-            Bucket: s3BucketName,
+            Bucket: S3_BUCKET_NAME,
             Key: `${params.TranscriptionJobName}.json`
         });
 
@@ -132,16 +117,16 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
                 }
 
             } else if (status === "FAILED") {
-                logger.info('Transcription Failed: ' + data.TranscriptionJob?.FailureReason);
+                logger.info(ERROR_MESSAGES.TRANSCRIPTION_FAILED + data.TranscriptionJob?.FailureReason);
                 reject(data.TranscriptionJob?.FailureReason);
             } else {
-                logger.info("In Progress...");
+                logger.info(IN_PROGRESS);
                 setTimeout(() => {
                     getTranscriptionDetails(params).then(resolve).catch(reject);
                 }, 2000);
             }
         } catch (err) {
-            logger.error('Error on transcription process: ', err);
+            logger.error(ERROR_MESSAGES.TRANSCRIPTION_ERROR, err);
         }
     })
 };
@@ -153,10 +138,10 @@ const getTranscriptionDetails = async (params: TranscriptionParams): Promise<voi
 app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     logger.info("req.body.inputUrlRef: ", req.body.inputUrlRef);
     if (!req.file && !req.body.inputUrlRef) {
-        return res.status(400).send({ message: 'No data provided' });
+        return res.status(400).send({ message: ERROR_MESSAGES.NO_DATA_FOUND });
     }
     if (req.file && req.file.size > FIVE_MINUTES) {
-        logger.error('File is too large');
+        logger.error(ERROR_MESSAGES.FILE_TOO_LARGE);
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
@@ -168,15 +153,12 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
             mp3Buffer = await convertYoutubeUrlToMp3(req.body.inputUrlRef);
         }
         catch (err) {
-            logger.error('Error with inputUrlRef: ', err);
+            logger.error(ERROR_MESSAGES.INVALID_YOUTUBE_URL, err);
         }
-    }
-    else {
-        logger.error('inputUrlRef is invalid: ', req.body.inputUrlRef);
     }
 
     if (mp3Buffer && mp3Buffer.length > FIVE_MINUTES) {
-        logger.error('File is too large');
+        logger.error(ERROR_MESSAGES.FILE_TOO_LARGE);
         return res.status(400).send({ message: AUDIO_TOO_LARGE });
     }
 
@@ -187,13 +169,13 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
         LanguageCode: "en-US",
         MediaFormat: "mp3",
         Media: {
-            MediaFileUri: `s3://decipher-audio-files/${s3key}`,
+            MediaFileUri: S3_BUCKET_URL + s3key,
         },
-        OutputBucketName: s3BucketName
+        OutputBucketName: S3_BUCKET_NAME
     };
 
     const command = new PutObjectCommand({
-        Bucket: s3BucketName,
+        Bucket: S3_BUCKET_NAME,
         Key: s3key,
         Body: mp3Buffer,
     });
@@ -201,31 +183,29 @@ app.post('/transcribe', upload.single('file'), async (req: any, res: any) => {
     try {
         await s3Client.send(command);
     } catch (err) {
-        logger.error("Error when uploading to S3: ", err);
+        logger.error(ERROR_MESSAGES.S3_UPLOAD_ERROR, err);
     }
 
     setTimeout(async () => {
-        logger.info("Receiving content from S3, uploading to Transcribe")
+        logger.info(TRANSCRIBE_UPLOAD);
         try {
-            await transcribeClient.send(
-                new StartTranscriptionJobCommand(params)
-            );
+            await transcribeClient.send(new StartTranscriptionJobCommand(params));
             await getTranscriptionDetails(params);
             const fullDataResponse = { fullTranscript, transcriptTimestampMap };
             if (fullTranscript || transcriptTimestampMap) {
                 res.send(fullDataResponse);
             }
             else {
-                res.send('Unable to process transcript');
+                res.send(ERROR_MESSAGES.TRANSCRIPTION_ERROR);
             }
         } catch (err) {
-            logger.error("Error at final stage: ", err);
+            logger.error(ERROR_MESSAGES.FINAL_STAGE_ERROR, err);
         }
     }, 2500);
 });
 
-app.listen(3000, '0.0.0.0', () => {
-    logger.info('Server is running on port 3000...');
+app.listen(PORT, '0.0.0.0', () => {
+    logger.info(SERVER_RUNNING);
 });
 
 module.exports.handler = serverless(app);
