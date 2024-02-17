@@ -1,6 +1,6 @@
 import { StartTranscriptionJobCommand, GetTranscriptionJobCommand, TranscribeClient } from "@aws-sdk/client-transcribe";
 import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { KeywordTimestamp, TranscriptionParams, TranscriptionResult } from './types/interfaces';
+import { KeywordTimestamp, TranscriptionParams, TranscriptionResult } from './interfaces/interfaces';
 import { clearDirectory } from './utils/helpers';
 import { awsCreds, rapidApiCreds } from './config/apiKeys';
 import { FIVE_MINUTES, AUDIO_TOO_LARGE, S3_BUCKET_NAME, DOWNLOADS_FOLDER, ERROR_MESSAGES, SERVER_RUNNING, SERVER_STARTING_UP, S3_BUCKET_URL, PORT, TRANSCRIBE_UPLOAD, IN_PROGRESS } from "./utils/constants";
