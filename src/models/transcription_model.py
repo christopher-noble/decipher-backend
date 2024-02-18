@@ -1,1 +1,3 @@
-# RDS table schema for transcriptions
+"""
+RDS table schema for transcriptions
+"""

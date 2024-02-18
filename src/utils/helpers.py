@@ -1,1 +1,3 @@
-# Helpers functions (clear downloads folder, format data, etc...)
+"""
+Helpers functions (clear downloads folder, format data, etc...)
+"""

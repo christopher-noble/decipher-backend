@@ -1,1 +1,3 @@
-# RDS configuration
+"""
+RDS init
+"""

@@ -1,1 +1,3 @@
-# Logger initialization
+"""
+Logger initialization
+"""

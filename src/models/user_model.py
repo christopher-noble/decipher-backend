@@ -1,1 +1,3 @@
-# RDS table schema for users
+"""
+RDS table schema for users
+"""
