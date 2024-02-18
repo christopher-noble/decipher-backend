@@ -5,8 +5,8 @@ setup(
     version='0.1.0',
     packages=find_packages(),
     install_requires=[
-        # List your project's dependencies here.
+        # List dependencies here.
         # For example: 'requests>=2.24.0',
     ],
-    # Additional metadata about your project
+    # Additional metadata about the project
 )
