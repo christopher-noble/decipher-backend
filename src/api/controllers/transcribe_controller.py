@@ -45,15 +45,14 @@ def transcribe():
             try:
                 ydl_opts = {
                     'format': 'mp3/bestaudio/best',
-                    # 'download_archive' : '/downloads',
-                    'outtmpl' : f'{DOWNLOADS_FOLDER}/%(id)s.%(ext)s' ,
-                    # ℹ️ See help(yt_dlp.postprocessor) for a list of available Postprocessors and their arguments
+                    'outtmpl' : f'{DOWNLOADS_FOLDER}/%(id)s.%(ext)s' , # Label the downloaded file by video ID
                     'postprocessors': [{  # Extract audio using ffmpeg
                         'key': 'FFmpegExtractAudio',
                         'preferredcodec': 'mp3',
                     }]
                 }
 
+                # Extract audio from YouTube video
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     status_code = ydl.download([url])
                     
