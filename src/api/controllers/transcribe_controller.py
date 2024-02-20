@@ -7,15 +7,9 @@ from pytube import YouTube
 import os
 from src.services.transcribe_service import *
 from src.utils.constants import *
-
-# # Calculate the path to the directory two levels up
-# current_dir = os.path.dirname(__file__)
-# parent_dir = os.path.dirname(current_dir)
-# grandparent_dir = os.path.dirname(parent_dir)
-
-# # Add the grandparent directory to sys.path
-# sys.path.append(grandparent_dir)
-
+# from yt_dlp import YoutubeDL
+import yt_dlp
+import subprocess
 
 def transcribe():
     try:
@@ -51,14 +45,26 @@ def transcribe():
             input_url = request.form['inputUrlRef']
             job_name = request.form['jobName']
             object_key = input_url + ".mp3"
+            url = YOUTUBE_URL_BASE + input_url
             try:
-                url = YOUTUBE_URL_BASE + input_url
-                video = YouTube(url)
-                file_object = video.streams.filter(only_audio=True).first()
-                file_object.download(filename=f"{input_url}.mp3")
+                ydl_opts = {
+                    'format': 'mp3/bestaudio/best',
+                    # 'download_archive' : '/downloads',
+                    'outtmpl' : f'{DOWNLOADS_FOLDER}/%(id)s.%(ext)s' ,
+                    # ℹ️ See help(yt_dlp.postprocessor) for a list of available Postprocessors and their arguments
+                    'postprocessors': [{  # Extract audio using ffmpeg
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                    }]
+                }
+
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    error_code = ydl.download([url])
+                    
+                print(error_code)
 
                 try:
-                    with open(f"{input_url}.mp3", "rb") as f:
+                    with open(f"{DOWNLOADS_FOLDER}/{input_url}.mp3", "rb") as f:
                         S3_CLIENT.upload_fileobj(f, BUCKET_NAME, object_key)
                     start_transcription_job(BUCKET_NAME, object_key, job_name)
 
