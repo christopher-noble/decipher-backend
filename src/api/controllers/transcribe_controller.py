@@ -59,19 +59,22 @@ def transcribe():
                 }
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    error_code = ydl.download([url])
+                    status_code = ydl.download([url])
                     
-                print(error_code)
+                print(status_code)
 
                 try:
+                    print("before upload")
                     with open(f"{DOWNLOADS_FOLDER}/{input_url}.mp3", "rb") as f:
+                        print("f: ", f)
                         S3_CLIENT.upload_fileobj(f, BUCKET_NAME, object_key)
                     start_transcription_job(BUCKET_NAME, object_key, job_name)
+                    print("after upload")
 
-                    # Delete the file.
-                    location = "C:/Users/joels/PycharmProjects/decipher-backend/"
-                    path = os.path.join(location, object_key)
-                    os.remove(path)
+                    # # Delete the file.
+                    # location = "C:/Users/joels/PycharmProjects/decipher-backend/"
+                    # path = os.path.join(location, object_key)
+                    # os.remove(path)
 
                     try:
                         result = get_transcription_job_result(job_name)
