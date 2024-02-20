@@ -15,7 +15,6 @@ Welcome to the server-side repository for Decipher. Here, you can effortlessly p
 - **Transcription with AWS Transcribe**: Integrate with AWS Transcribe for automatic transcription.
 - **Keyword-Driven Transcription**: Generate dynamic timestamps for specified keywords or phrases.
 - **Scalability**: Handle high volumes of audio conversion and transcription requests.
-- **RESTful API**: Easily integrate with other systems through a well-documented API.
 
 ## Hosting & Delivery
 
