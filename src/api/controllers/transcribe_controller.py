@@ -3,13 +3,9 @@ Business logic for API endpoints
 """
 
 from flask import jsonify, request
-from pytube import YouTube
-import os
 from src.services.transcribe_service import *
 from src.utils.constants import *
-# from yt_dlp import YoutubeDL
 import yt_dlp
-import subprocess
 
 def transcribe():
     try:
