@@ -1,0 +1,4 @@
+Flask
+Flask-CORS
+boto3
+pytube
