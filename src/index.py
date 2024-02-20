@@ -9,7 +9,7 @@ from .api.routes.transcribe import transcribe_blueprint
 app = Flask(__name__)
 CORS(app, resources={r"/transcribe": {"origins": "http://localhost:3000"}})
 
-# For joel: endpoint is now /api/transcribe instead of /transcribe. Pull changes from front-end
+# For joel: endpoint is now /api/transcribe instead of /transcribe. Pull changes from decipher-frontend
 app.register_blueprint(transcribe_blueprint, url_prefix='/api')
 
 # Run the Flask server
