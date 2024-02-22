@@ -19,6 +19,7 @@ Welcome to the server-side repository for Decipher. Here, you can effortlessly p
 ## Hosting & Delivery
 
 - AWS EC2
+- Gunicorn WSGI Server
 - AWS CloudFront
 - AWS Route 53
 
