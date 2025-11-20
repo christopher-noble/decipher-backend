@@ -6,31 +6,26 @@ With Decipher, you can effortlessly pinpoint any segment in your favourite podca
 
 ## Technical Workflow
 
-1. User uploads audio or YouTube URL
+1. **User uploads audio or YouTube URL**
+   - Direct files processed via Flask multipart upload
+   - YouTube URLs converted to MP3 using yt-dlp + FFmpeg
 
-- Direct files processed via Flask multipart upload
-- YouTube URLs converted to MP3 using yt-dlp + FFmpeg
-- Pre-processing & validation
+2. **Pre-processing & validation**
+   - Duration validation using pydub
+   - File upload to S3 storage
 
-2. Duration validation using pydub
+3. **AWS Transcribe job initiation**
+   - Trigger transcription job with audio file reference
+   - Configure job parameters (language, format, output location)
 
-- File upload to S3 storage
-- AWS Transcribe job initiation
+4. **Asynchronous processing**
+   - Custom polling mechanism monitors job status
+   - Retry logic handles variable processing times
 
-3. Trigger transcription job with audio file reference
-
-- Configure job parameters (language, format, output location)
-- Asynchronous processing
-
-4. Custom polling mechanism monitors job status
-
-- Retry logic handles variable processing times
-- Result processing & delivery
-
-5. Parse transcription JSON from S3
-
-- Generate word-level timestamp mappings
-- Return searchable transcript with precise time indexes
+5. **Result processing & delivery**
+   - Parse transcription JSON from S3
+   - Generate word-level timestamp mappings
+   - Return searchable transcript with precise time indexes
 
 ## Hosting & Delivery
 
