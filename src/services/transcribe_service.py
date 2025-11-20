@@ -1,7 +1,3 @@
-"""
-AWS transcription service logic for external API communications.
-"""
-
 import time
 from flask import jsonify
 from src.utils.constants import *
