@@ -7,25 +7,22 @@ from flask import jsonify
 from src.utils.constants import *
 import json
 
-# Start a transcription job
 def start_transcription_job(bucket_name, object_key, job_name, language_code='en-US'):
     TRANSCRIBE_CLIENT.start_transcription_job(
         TranscriptionJobName=job_name,
         LanguageCode=language_code,
-        MediaFormat='mp3',  # replace with your audio format
+        MediaFormat='mp3',
         Media={'MediaFileUri': f's3://{bucket_name}/{object_key}'},
-        OutputBucketName=bucket_name  # specify the bucket for the transcription output
+        OutputBucketName=bucket_name
     )
 
 
-# Download the json once the job is complete
 def get_completed_transcript(bucket_name, object_key):
     response = S3_CLIENT.get_object(Bucket=bucket_name, Key=object_key)
     transcription_result = response['Body'].read().decode('utf-8')
     return transcription_result
 
 
-# Get the result. Max 50 attempts (for now).
 def get_transcription_job_result(job_name):
     attempts = 0
     while attempts < MAX_RETRIEVE_ATTEMPTS:
